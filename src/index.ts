@@ -17,7 +17,7 @@ if (!uri) {
 }
 
 const JWKS = jose.createRemoteJWKSet(
-  new URL("http://localhost:3000/api/auth/jwks"),
+  new URL("http://projects-two-gules.vercel.app/api/auth/jwks"),
 );
 
 const clientOptions: MongoClientOptions = {
