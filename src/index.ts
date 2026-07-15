@@ -16,9 +16,16 @@ if (!uri) {
   throw new Error("MONGODB_URI is not defined in the environment");
 }
 
-const JWKS = jose.createRemoteJWKSet(
-  new URL(`${process.env.NEXT_PUBLIC_URL}/api/auth/jwks`),
-);
+const jwksUrl = process.env.NEXT_PUBLIC_URL
+  ? `${process.env.NEXT_PUBLIC_URL.replace(/\/$/, "")}/api/auth/jwks`
+  : 'http://projects-two-gules.vercel.app/api/auth/jwks';
+
+const JWKS = jwksUrl
+  ? jose.createRemoteJWKSet(new URL(jwksUrl), {
+      cooldownDuration: 30000,
+      timeoutDuration: 5000,
+    })
+  : null;
 
 const clientOptions: MongoClientOptions = {
   serverApi: {
@@ -29,6 +36,18 @@ const clientOptions: MongoClientOptions = {
 };
 
 const client = new MongoClient(uri, clientOptions);
+
+// Cache database connections across serverless invocations
+let cachedDb: any = null;
+
+async function getDatabase() {
+  if (cachedDb) return cachedDb;
+  
+  // MongoClient automatically handles internal connection pooling
+  await client.connect();
+  cachedDb = client.db('aesthete');
+  return cachedDb;
+}
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -49,6 +68,11 @@ const verifyToken = async (
       return;
     }
 
+    if (!JWKS) {
+      res.status(500).json({ message: "Auth is not configured (NEXT_PUBLIC_URL missing)" });
+      return;
+    }
+
     const token = authHeader.slice("Bearer ".length);
     const { payload } = await jose.jwtVerify(token, JWKS);
     req.user = payload;
@@ -58,63 +82,69 @@ const verifyToken = async (
   }
 };
 
-async function run(){
-  try{
-    const storeDB = await client.db('aesthete');
+// --- TOP-LEVEL SYNCHRONOUS ROUTE REGISTRATIONS ---
 
-    app.get('/api/admin/customer', async (req, res) => {
-      const customer = await storeDB.collection('user').find({
-        role: 'user'
-      }).toArray()
-      res.send(customer)
-    })
+app.get('/', (req, res) => {
+  res.send({ msg: 'run' });
+});
 
-    app.post('/api/user/addCart',verifyToken,async(req,res) => {
-       console.log(req.body)
-       console.log(typeof(req.body.quantity))
-       const msg =await storeDB.collection('cart').updateOne(
-        {
-          productId:req.body.productId,
-          userEmail :req.body.userEmail,
-        },{
-          $inc:{
-            quantity:req.body.quantity,
-          },
-          $set:{
-            name:req.body.name,
-            price: req.body.price,
-            
-            img: req.body.img,
-            
-          }
-        },{
-          upsert:true,
-        }
-       )
-       res.send({})
-    })
-
-    app.get('/api/user/cart/:email',verifyToken,async( req ,res) => {
-      const data = await storeDB.collection('cart').find({
-        userEmail:req.params.email
-      }).toArray();
-      res.send(data)
-    })
-
-    const PORT = process.env.PORT || 8000;
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-
+app.get('/api/admin/customer', async (req, res) => {
+  try {
+    const storeDB = await getDatabase();
+    const customer = await storeDB.collection('user').find({ role: 'user' }).toArray();
+    res.send(customer);
   } catch (error) {
-    console.error("Failed to connect to database:", error);
-    process.exit(1);
+    res.status(500).send({ error: "Failed to fetch customers" });
   }
-}
-app.get('/',(req,res)=>{
-  res.send({
-    msg:'run'
-  })
-})
+});
 
-run();
+app.post('/api/user/addCart', verifyToken, async (req, res) => {
+  try {
+    console.log(req.body);
+    console.log(typeof req.body.quantity);
+    
+    const storeDB = await getDatabase();
+    await storeDB.collection('cart').updateOne(
+      {
+        productId: req.body.productId,
+        userEmail: req.body.userEmail,
+      },
+      {
+        $inc: { quantity: req.body.quantity },
+        $set: {
+          name: req.body.name,
+          price: req.body.price,
+          img: req.body.img,
+        }
+      },
+      { upsert: true }
+    );
+    res.send({});
+  } catch (error) {
+    res.status(500).send({ error: "Failed to update cart" });
+  }
+});
+
+app.get('/api/user/cart/:email', verifyToken, async (req, res) => {
+  try {
+    const storeDB = await getDatabase();
+    const data = await storeDB.collection('cart').find({
+      userEmail: req.params.email
+    }).toArray();
+    res.send(data);
+  } catch (error) {
+    res.status(500).send({ error: "Failed to fetch cart data" });
+  }
+});
+
+// --- CONDITIONAL LOCAL RUNNER ---
+// Only runs the persistent listener if you run this locally, avoiding Vercel blocking.
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 8000;
+  app.listen(PORT, () => {
+    console.log(`Local server running on port ${PORT}`);
+  });
+}
+
+// CRITICAL FOR VERCEL: Export the application instance
+export default app;
