@@ -138,3 +138,11 @@ app.get('/api/user/cart/:email', verifyToken, async (req, res) => {
 });
 
 // Start the HTTP server. Vercel injects process.env.PORT; locally it
+// Start the HTTP server. Vercel injects process.env.PORT; locally it
+// defaults to 3000 for local development.
+if (process.env.NODE_ENV !== "production") {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => console.log(`Listening on port ${port}`));
+}
+
+export default app;
