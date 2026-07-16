@@ -4,7 +4,7 @@
   "description": "E-commerce backend API",
   "main": "dist/index.js",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

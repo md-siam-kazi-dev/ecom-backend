@@ -137,14 +137,4 @@ app.get('/api/user/cart/:email', verifyToken, async (req, res) => {
   }
 });
 
-// --- CONDITIONAL LOCAL RUNNER ---
-// Only runs the persistent listener if you run this locally, avoiding Vercel blocking.
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 8000;
-  app.listen(PORT, () => {
-    console.log(`Local server running on port ${PORT}`);
-  });
-}
-
-// CRITICAL FOR VERCEL: Export the application instance
-export default app;
+// Start the HTTP server. Vercel injects process.env.PORT; locally it 
