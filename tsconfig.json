@@ -4,7 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "outDir": "./dist",
-    "rootDir": "api",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["index.ts"],
+  "include": ["index.ts", "api/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
